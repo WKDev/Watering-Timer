@@ -24,3 +24,10 @@ Wiring is pretty much easy. just connect pushbutton to GPIO14(D5), relay to GPIO
    4. setting watering time will be supported later version.
 
       
+
+## Changelog
+
+### Mar 31th, 2021
+
+Alpha 1.0 | Actually, this is quite easy project to make. once you upload, you can access to ESPWebserver. There's 2 methods to trigger: pushbutton, web server. once you push the button, solenoid valve turns on 30 minutes. Or you can turn it on by web server.
+

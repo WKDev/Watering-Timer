@@ -4,6 +4,7 @@
 //OTA Upload
 //HTTP Server(once it triggered, it turns on for 30 mins )
 // 192.168.0.5 ACUNIT // it should be updated
+// 192,168.0.34 WATERING UNIT
 
 //!!!IMPORTANT
 // Low-Level Relay is used for this project. which means, if code below written 'LOW', Relay turns on. and vise versa.
@@ -30,6 +31,7 @@
 #define BUTTON 14
 
 #define UNIT_TYPE "Watering Timer"
+#define LONG_DURATION 1000
 
 const char *ssid = STASSID;
 const char *password = STAPSK;
@@ -40,9 +42,16 @@ int triggerState = 0;
 unsigned long startTime = 0;
 unsigned long endTime = 0;
 
+// button action variable to detect long-press
+int longDuration = LONG_DURATION;
+int btnState = 0;
+unsigned long btnPressTime = 0;
+unsigned long btnReleaseTime = 0;
+int lastState = 0;
+int currentState = 1;
+
 void handleRoot()
 {
-  digitalWrite(LED_BUILTIN, HIGH);
   String message = "<h1>Welcome to Cranberry-IoT END UNIT.</h1>";
   message += "<h2>This is " + String(UNIT_TYPE) + " Unit</h2>";
   message += "\n</p><p>Arguments: ";
@@ -54,13 +63,15 @@ void handleRoot()
     message += "<p>Watering...";
     message += (startTime + 1000 * 60 * 30 - millis()) / (1000 * 60);
     message += " min(s) ";
-    message += (startTime + 1000 * 60 * 30 - millis()) / (1000) - floor(startTime + 1000 * 60 * 30 - millis()) / (1000 * 60);
+    message += ((startTime + 1000 * 60 * 30 - millis()) / (1000)) - 60 * floor((startTime + 1000 * 60 * 30 - millis()) / (1000 * 60));
     message += " sec left.</p>";
   }
   else
   {
     float sinceDay = endTime / (1000 * 60 * 60 * 24);
     float sinceHour = endTime / (1000 * 60 * 60);
+    float sinceMin = endTime / (1000 * 60);
+
     if (sinceHour >= 24)
     {
       sinceHour = sinceHour - (endTime / (1000 * 60 * 60 * 24));
@@ -71,6 +82,14 @@ void handleRoot()
       message += "<p>It's been";
       message += sinceHour;
       message += " hours";
+      message += " since last watered"
+                 "</p>";
+    }
+    else if (sinceHour < 1)
+    {
+      message += "<p>It's been";
+      message += sinceMin;
+      message += " mins";
       message += " since last watered"
                  "</p>";
     }
@@ -212,11 +231,44 @@ void setup()
   Serial.println("HTTP server started");
 
   pinMode(RELAY, OUTPUT);
+  pinMode(BUTTON, INPUT);
+
   digitalWrite(RELAY, HIGH);
 }
 
 void loop()
 {
+
+  currentState = digitalRead(BUTTON);
+
+  if (lastState == 0 && currentState == 1)
+  {
+    btnPressTime = millis();
+    // Serial.println("press detected");
+  }
+  else if (lastState == 1 && currentState == 0)
+  {
+    btnReleaseTime = millis();
+    // Serial.println("release detected");
+
+    long pressDuration = btnReleaseTime - btnPressTime;
+    Serial.println(pressDuration);
+    if (pressDuration < longDuration)
+    {
+
+      Serial.println("button triggerd");
+      if (triggerState)
+      {
+        triggerState = 0;
+        endTime = millis();
+      }
+      else
+      {
+        triggerState = 1;
+        startTime = millis();
+      }
+    }
+  }
 
   ArduinoOTA.handle();
   server.handleClient();
@@ -234,8 +286,14 @@ void loop()
       triggerState = 0;
       endTime = millis();
     }
-    Serial.print("Watering... ");
-    Serial.print((startTime + 1000 * 60 * 30 - millis()));
-    Serial.println(" left.");
+    // Serial.print("Watering... ");
+    // Serial.print((startTime + 1000 * 60 * 30 - millis()));
+    // Serial.println(" left.");
   }
+  else
+  {
+    digitalWrite(RELAY, HIGH);
+  }
+
+  lastState = currentState;
 }
