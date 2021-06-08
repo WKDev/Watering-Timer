@@ -31,3 +31,6 @@ Wiring is pretty much easy. just connect pushbutton to GPIO14(D5), relay to GPIO
 
 Alpha 1.0 | Actually, this is quite easy project to make. once you upload, you can access to ESPWebserver. There's 2 methods to trigger: pushbutton, web server. once you push the button, solenoid valve turns on 30 minutes. Or you can turn it on by web server.
 
+### June 8th, 2021
+
+Alpha 1.1 | Added NTP so that NodeMCU to know what time it is. Fixed some bugs(In previous version, time that indicates how long have been since last watered was not displayed correctly.) Web page is no longer redirected another page when you turn it on /off. **it is not that bad for actual using but keep that this it still in development in mind.
