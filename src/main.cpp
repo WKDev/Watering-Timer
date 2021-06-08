@@ -10,17 +10,25 @@
 // Low-Level Relay is used for this project. which means, if code below written 'LOW', Relay turns on. and vise versa.
 // if you are trying to use common High-Level Relay, you should change LOW to HIGH, HIGH to LOW.
 
+//EEPROM Map
+// 1 : watering time once triggered : you can set this value up to 30.
+
 //Arduino OTA
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <ArduinoJson.h>
-
+#include <EEPROM.h>
 // HTTPServer
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+
+//timer
+#include <NTPClient.h>
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "kr.pool.ntp.org", 3600 * 9, 3600);
 
 #ifndef STASSID
 #define STASSID "IoT_System"
@@ -39,6 +47,7 @@ const char *password = STAPSK;
 ESP8266WebServer server(80);
 
 int triggerState = 0;
+unsigned long initTime = 0;
 unsigned long startTime = 0;
 unsigned long endTime = 0;
 
@@ -50,13 +59,17 @@ unsigned long btnReleaseTime = 0;
 int lastState = 0;
 int currentState = 1;
 
-void handleRoot()
+String MainPage()
 {
+  timeClient.update();
   String message = "<h1>Welcome to Cranberry-IoT END UNIT.</h1>";
   message += "<h2>This is " + String(UNIT_TYPE) + " Unit</h2>";
-  message += "\n</p><p>Arguments: ";
-  message += server.args();
+  message += "\n</p><p>Current Time :  ";
+  message += timeClient.getFormattedTime();
   message += "</p>";
+  message += "\n</p><p>Uptime :  ";
+  message += millis() / (60 * 1000);
+  message += "mins.</p>";
   message += "<p>local IP : " + WiFi.localIP().toString() + "</p>";
   if (triggerState)
   {
@@ -68,48 +81,29 @@ void handleRoot()
   }
   else
   {
-    float sinceDay = endTime / (1000 * 60 * 60 * 24);
-    float sinceHour = endTime / (1000 * 60 * 60);
-    float sinceMin = endTime / (1000 * 60);
+    int currTime = millis();
+    float sinceDay = (currTime - endTime) / (1000 * 60 * 60 * 24);
+    float sinceHour = (currTime - endTime) / (1000 * 60 * 60);
+    float sinceMin = (currTime - endTime) / (1000 * 60);
 
-    if (sinceHour >= 24)
-    {
-      sinceHour = sinceHour - (endTime / (1000 * 60 * 60 * 24));
-    }
-
-    if (sinceDay < 1)
-    {
-      message += "<p>It's been";
-      message += sinceHour;
-      message += " hours";
-      message += " since last watered"
-                 "</p>";
-    }
-    else if (sinceHour < 1)
-    {
-      message += "<p>It's been";
-      message += sinceMin;
-      message += " mins";
-      message += " since last watered"
-                 "</p>";
-    }
-    else
-    {
-      message += "<p>It's been ";
-      message += sinceDay;
-      message += "Days ";
-      message += sinceHour;
-      message += " since last watered"
-                 "</p>";
-    }
+    message += "<p>It's been ";
+    message += sinceDay;
+    message += "days ";
+    message += sinceHour;
+    message += " hours ";
+    message += sinceMin;
+    message += " mins ";
+    message += " since last watered"
+               "</p>";
   }
   message += "<br><a href = '/on'> on</ a><br><a href = '/off'>[off]</ a>";
+  return message;
+}
 
-  for (uint8_t i = 0; i < server.args(); i++)
-  {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
-  }
-  server.send(200, "text/html", message);
+void handleRoot()
+{
+  String mainData = MainPage();
+  server.send(200, "text/html", mainData);
 }
 
 // Define routing
@@ -118,38 +112,38 @@ void restServerRouting()
   server.on("/", HTTP_GET, handleRoot);
   server.on("/on", []()
             {
+              String onData = MainPage();
               triggerState = 1;
               startTime = millis();
-              server.send(200, "text/html", "<a href='/on'>[on]</a><br><a href='/off'>off</a>");
+              server.send(200, "text/html", onData);
             });
 
   server.on("/off", []()
             {
+              String offData = MainPage();
+
               triggerState = 0;
-              server.send(200, "text/html", "<a href='/on'>on</a><br><a href='/off'>[off]</a>");
+              endTime = millis();
+              server.send(200, "text/html", offData);
+
+              // server.send(200, NULL);
             });
 }
 
 // Manage not found URL
 void handleNotFound()
 {
-  String message = "File Not Found\n\n";
+  String message = "404 Not Found\n\n";
   message += "URI: ";
   message += server.uri();
   message += "\nMethod: ";
   message += (server.method() == HTTP_GET) ? "GET" : "POST";
-  message += "\nArguments: ";
-  message += server.args();
-  message += "\n";
-  for (uint8_t i = 0; i < server.args(); i++)
-  {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
-  }
   server.send(404, "text/plain", message);
 }
 
 void setup()
 {
+  initTime = millis();
   //WiFi CONNECTION
   Serial.begin(115200);
   Serial.println("Booting");
@@ -234,6 +228,10 @@ void setup()
   pinMode(BUTTON, INPUT);
 
   digitalWrite(RELAY, HIGH);
+  timeClient.begin();
+  endTime = millis();
+
+  EEPROM.begin(2048);
 }
 
 void loop()
